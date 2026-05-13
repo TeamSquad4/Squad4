@@ -25,7 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
-import { api, type RecordResponse } from "@/services/api";
+import { api, type RecordResponse, type UserResponse } from "@/services/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard")({
@@ -47,6 +47,7 @@ export const Route = createFileRoute("/dashboard")({
 
 function PatientDashboard() {
   const [records, setRecords] = useState<RecordResponse[]>([]);
+  const [user, setUser] = useState<UserResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,18 +58,23 @@ function PatientDashboard() {
       return;
     }
 
-    const fetchRecords = async () => {
+    const fetchData = async () => {
       try {
-        const data = await api.records.getRecords(userId);
-        setRecords(data);
+        const [recordsData, profileData] = await Promise.all([
+          api.records.getRecords(userId),
+          api.profile.getProfile(),
+        ]);
+
+        setRecords(recordsData);
+        setUser(profileData);
       } catch (error) {
-        toast.error(`Failed to load records: ${(error as Error).message}`);
+        toast.error(`Failed to load dashboard: ${(error as Error).message}`);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchRecords();
+    fetchData();
   }, []);
 
   const recordCount = records.length;
@@ -102,7 +108,7 @@ function PatientDashboard() {
                 <Button asChild size="lg" className="h-14 px-8 rounded-full text-lg font-bold group shadow-elegant">
                   <Link to="/upload">
                     Upload Record
-                    <ArrowUpRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
+                    <ArrowUpRight className="ml-2 h-5 w-5" />
                   </Link>
                 </Button>
 
@@ -127,10 +133,7 @@ function PatientDashboard() {
                 </div>
               </div>
 
-              <div
-                className="absolute bottom-10 right-4 p-4 bg-white dark:bg-muted shadow-xl rounded-2xl border border-border/50 animate-float"
-                style={{ animationDelay: "1s" }}
-              >
+              <div className="absolute bottom-10 right-4 p-4 bg-white dark:bg-muted shadow-xl rounded-2xl border border-border/50 animate-float">
                 <div className="flex items-center gap-4">
                   <div className="h-10 w-10 rounded-full bg-primary/20 text-primary flex items-center justify-center">
                     <Play className="h-5 w-5 fill-current" />
@@ -164,6 +167,23 @@ function PatientDashboard() {
             </div>
           </div>
         </div>
+
+        <Card className="border-border/60 shadow-card">
+          <CardHeader>
+            <CardTitle>My Profile</CardTitle>
+            <CardDescription>Your registered health details</CardDescription>
+          </CardHeader>
+
+          <CardContent className="grid sm:grid-cols-2 gap-4 text-sm">
+            <p><b>Name:</b> {user?.name || "-"}</p>
+            <p><b>Email:</b> {user?.email || "-"}</p>
+            <p><b>Phone:</b> {user?.phone || "-"}</p>
+            <p><b>DOB:</b> {user?.dob || "-"}</p>
+            <p><b>Gender:</b> {user?.gender || "-"}</p>
+            <p><b>Blood Group:</b> {user?.blood_group || "-"}</p>
+            <p className="sm:col-span-2"><b>Address:</b> {user?.address || "-"}</p>
+          </CardContent>
+        </Card>
 
         <div className="grid md:grid-cols-3 gap-6">
           <Link to="/records" search={{ patientId: undefined, q: "" }} className="group">
@@ -210,7 +230,7 @@ function PatientDashboard() {
             <CardContent>
               {loading ? (
                 <div className="h-80 flex items-center justify-center">
-                  <div className="text-center">Loading records...</div>
+                  Loading records...
                 </div>
               ) : recordCount === 0 ? (
                 <div className="h-80 flex flex-col items-center justify-center text-center space-y-4">
@@ -294,30 +314,9 @@ function PatientDashboard() {
 
               <CardContent className="space-y-4">
                 <div className="p-3 rounded-xl bg-white dark:bg-muted border border-destructive/20 space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-destructive">
-                      Anomaly Detected
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">2h ago</span>
-                  </div>
                   <p className="text-xs font-bold">Elevated Systolic Trend</p>
                   <p className="text-[11px] text-muted-foreground">
                     Your systolic BP has increased by 8mmHg over the last 3 mornings.
-                    Potential stress trigger detected.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white dark:bg-muted border border-info/20 space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-info">
-                      Pattern Match
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">Yesterday</span>
-                  </div>
-                  <p className="text-xs font-bold">Medication Sync</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Resting heart rate stabilized 48h after starting Atorvastatin.
-                    Correlation: 94%.
                   </p>
                 </div>
               </CardContent>
@@ -330,30 +329,15 @@ function PatientDashboard() {
 
               <CardContent className="space-y-4">
                 <Link to="/records" search={{ patientId: undefined, q: "" }} className="w-full">
-                  <QuickAccessButton
-                    label="Request New Report"
-                    icon={Search}
-                    bg="bg-primary/10"
-                    text="text-primary"
-                  />
+                  <QuickAccessButton label="Request New Report" icon={Search} bg="bg-primary/10" text="text-primary" />
                 </Link>
 
                 <Link to="/access" className="w-full">
-                  <QuickAccessButton
-                    label="Share with Doctor"
-                    icon={Plus}
-                    bg="bg-orange-100"
-                    text="text-orange-600"
-                  />
+                  <QuickAccessButton label="Share with Doctor" icon={Plus} bg="bg-orange-100" text="text-orange-600" />
                 </Link>
 
                 <Link to="/records" search={{ patientId: undefined, q: "" }} className="w-full">
-                  <QuickAccessButton
-                    label="AI Record Analysis"
-                    icon={Sparkles}
-                    bg="bg-green-100"
-                    text="text-green-600"
-                  />
+                  <QuickAccessButton label="AI Record Analysis" icon={Sparkles} bg="bg-green-100" text="text-green-600" />
                 </Link>
               </CardContent>
             </Card>

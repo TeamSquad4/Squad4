@@ -13,6 +13,10 @@ import {
   LogOut,
   Activity,
   Users,
+  Sun,
+  Moon,
+  Settings,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -29,11 +33,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getRole, clearAuth } from "@/lib/auth-state";
 import { useTheme } from "@/components/theme-provider";
-import { Sun, Moon, Settings, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { medicalRecords } from "@/lib/mock-data";
 import { AiAssistant } from "@/components/ai-assistant";
 import { HealthChainLogo } from "@/components/logo";
+import { api, type UserResponse } from "@/services/api";
 
 interface NavItem {
   to: string;
@@ -56,17 +60,25 @@ const navItems: NavItem[] = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [user, setUser] = useState<UserResponse | null>(null);
+
   const location = useLocation();
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const role = getRole() ?? "patient";
+  const searchRef = useRef<HTMLFormElement>(null);
 
   const visibleItems = navItems.filter((i) => i.roles.includes(role as any));
 
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const searchRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    api.profile
+      .getProfile()
+      .then(setUser)
+      .catch(() => setUser(null));
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -74,23 +86,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         setShowSuggestions(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const displayName =
+    user?.name || (role === "doctor" ? "Doctor" : role === "admin" ? "Admin" : "User");
+
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
   const searchSuggestions = searchQuery.trim()
-    ? medicalRecords.filter(
-        (r) =>
-          r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.doctor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          r.hospital.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 5)
+    ? medicalRecords
+        .filter(
+          (r) =>
+            r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            r.doctor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            r.hospital.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+        .slice(0, 5)
     : [];
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (searchQuery.trim()) {
-      navigate({ to: "/records", search: { q: searchQuery } });
+      navigate({
+        to: "/records",
+        search: { patientId: undefined, q: searchQuery },
+      });
       setShowSuggestions(false);
     }
   };
@@ -98,31 +128,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const handleThemeToggle = (e: React.MouseEvent) => {
     const x = e.clientX;
     const y = e.clientY;
-    const endRadius = Math.hypot(
-      Math.max(x, innerWidth - x),
-      Math.max(y, innerHeight - y)
-    );
-
-    const isDark = theme === "dark";
-    const nextTheme = isDark ? "light" : "dark";
+    const nextTheme = theme === "dark" ? "light" : "dark";
 
     if (!document.startViewTransition) {
       setTheme(nextTheme);
       return;
     }
 
+    const endRadius = Math.hypot(
+      Math.max(x, innerWidth - x),
+      Math.max(y, innerHeight - y)
+    );
+
     const transition = document.startViewTransition(() => {
       setTheme(nextTheme);
     });
 
     transition.ready.then(() => {
-      const clipPath = [
-        `circle(0px at ${x}px ${y}px)`,
-        `circle(${endRadius}px at ${x}px ${y}px)`,
-      ];
       document.documentElement.animate(
         {
-          clipPath: clipPath,
+          clipPath: [
+            `circle(0px at ${x}px ${y}px)`,
+            `circle(${endRadius}px at ${x}px ${y}px)`,
+          ],
         },
         {
           duration: 350,
@@ -138,43 +166,39 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     navigate({ to: "/login" });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    setMousePos({ x: e.clientX, y: e.clientY });
-  };
-
   return (
     <div
-      onMouseMove={handleMouseMove}
+      onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}
       className="flex min-h-screen w-full bg-background overflow-hidden relative"
     >
-      {/* Interactive Glow */}
       <div
-        className="pointer-events-none absolute z-0 h-[600px] w-[600px] rounded-full bg-primary/5 blur-[120px] transition-opacity duration-1000"
+        className="pointer-events-none absolute z-0 h-[600px] w-[600px] rounded-full bg-primary/5 blur-[120px]"
         style={{
           left: mousePos.x - 300,
           top: mousePos.y - 300,
         }}
       />
-      {/* Sidebar */}
+
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex flex-col bg-sidebar text-sidebar-foreground transition-all duration-300",
-          collapsed ? "w-16" : "w-64",
+          collapsed ? "w-16" : "w-64"
         )}
       >
-        <Link 
+        <Link
           to={role === "doctor" ? "/doctor" : role === "admin" ? "/admin" : "/dashboard"}
-          className="flex h-20 items-center gap-3 border-b border-sidebar-border px-4 group transition-colors hover:bg-sidebar-accent/50 cursor-pointer"
+          className="flex h-20 items-center gap-3 border-b border-sidebar-border px-4 hover:bg-sidebar-accent/50"
         >
-          <div className="h-10 w-10 shrink-0 flex items-center justify-center bg-white dark:bg-muted rounded-xl overflow-hidden border border-border shadow-sm group-hover:scale-110 transition-transform duration-300">
+          <div className="h-10 w-10 shrink-0 flex items-center justify-center bg-white dark:bg-muted rounded-xl border border-border shadow-sm">
             <HealthChainLogo size={32} />
           </div>
+
           {!collapsed && (
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+              <span className="text-sm font-bold tracking-tight text-foreground">
                 HealthChain
               </span>
-              <span className="text-[10px] uppercase font-black tracking-widest text-sidebar-foreground/40 transition-colors">
+              <span className="text-[10px] uppercase font-black tracking-widest text-sidebar-foreground/40">
                 MEDICAL VAULT
               </span>
             </div>
@@ -183,25 +207,27 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 space-y-1 p-3">
           {visibleItems.map((item) => {
-            const active = location.pathname === item.to ||
-              (item.to !== "/dashboard" && item.to !== "/doctor" && location.pathname.startsWith(item.to));
+            const active =
+              location.pathname === item.to ||
+              (item.to !== "/dashboard" &&
+                item.to !== "/doctor" &&
+                location.pathname.startsWith(item.to));
+
             const Icon = item.icon;
+
             return (
               <Link
                 key={item.to}
-                to={item.to}
+                to={item.to as any}
+                search={item.to === "/records" ? { patientId: undefined, q: "" } : undefined}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-all duration-300 group",
                   active
                     ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-elegant"
-                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 )}
               >
-                <Icon className={cn(
-                  "h-4 w-4 shrink-0 transition-all duration-300",
-                  !active && "group-hover:scale-125 group-hover:text-primary-glow group-hover:-translate-y-0.5",
-                  active && "scale-110"
-                )} />
+                <Icon className="h-4 w-4 shrink-0" />
                 {!collapsed && <span>{item.label}</span>}
               </Link>
             );
@@ -213,7 +239,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setCollapsed((c) => !c)}
             className="flex w-full items-center justify-center gap-2 rounded-md p-2 text-xs text-sidebar-foreground/70 hover:bg-sidebar-accent"
           >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : (
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
               <>
                 <ChevronLeft className="h-4 w-4" />
                 <span>Collapse</span>
@@ -223,9 +251,12 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main */}
-      <div className={cn("flex flex-1 flex-col transition-all duration-300", collapsed ? "ml-16" : "ml-64")}>
-        {/* Navbar */}
+      <div
+        className={cn(
+          "flex flex-1 flex-col transition-all duration-300",
+          collapsed ? "ml-16" : "ml-64"
+        )}
+      >
         <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-card/80 px-6 backdrop-blur">
           <form ref={searchRef} onSubmit={handleSearch} className="relative flex-1 max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -237,35 +268,39 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               }}
               onFocus={() => setShowSuggestions(true)}
               placeholder="Search records, doctors, prescriptions..."
-              className="pl-9 bg-muted/50 border-transparent focus-visible:bg-card transition-all duration-300 focus-visible:ring-primary/50"
+              className="pl-9 bg-muted/50 border-transparent"
             />
+
             {showSuggestions && searchQuery.trim() && (
-              <div className="absolute top-full left-0 mt-2 w-full rounded-md border border-border bg-popover text-popover-foreground shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2">
+              <div className="absolute top-full left-0 mt-2 w-full rounded-md border border-border bg-popover shadow-lg z-50 overflow-hidden">
                 {searchSuggestions.length > 0 ? (
                   <ul className="py-2">
                     {searchSuggestions.map((suggestion) => (
                       <li key={suggestion.id}>
                         <button
                           type="button"
-                          className="w-full text-left px-4 py-2 text-sm hover:bg-muted focus:bg-muted transition-colors flex flex-col"
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-muted"
                           onClick={() => {
                             setSearchQuery(suggestion.name);
                             setShowSuggestions(false);
-                            navigate({ to: "/records", search: { q: suggestion.name } });
+                            navigate({
+                              to: "/records",
+                              search: { patientId: undefined, q: suggestion.name },
+                            });
                           }}
                         >
                           <span className="font-medium">{suggestion.name}</span>
-                          <span className="text-xs text-muted-foreground flex gap-2">
-                            <span>{suggestion.doctor}</span>
-                            <span>&middot;</span>
-                            <span>{suggestion.type}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {suggestion.doctor} · {suggestion.type}
                           </span>
                         </button>
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <div className="px-4 py-3 text-sm text-muted-foreground">No results found.</div>
+                  <div className="px-4 py-3 text-sm text-muted-foreground">
+                    No results found.
+                  </div>
                 )}
               </div>
             )}
@@ -274,35 +309,20 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="ml-auto flex items-center gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative group hover:bg-primary/10 transition-colors">
-                  <Bell className="h-5 w-5 transition-transform duration-300 origin-top group-hover:rotate-12 group-hover:scale-110" />
-                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-card animate-pulse" />
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-destructive ring-2 ring-card" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                side="bottom"
-                align="end"
-                sideOffset={8}
-                collisionPadding={16}
-                className="w-80"
-              >
+
+              <DropdownMenuContent align="end" className="w-80">
                 <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-                  <div className="flex w-full items-center gap-2">
-                    <Activity className="h-4 w-4 text-destructive" />
-                    <span className="text-sm font-medium">AI Alert</span>
-                    <span className="ml-auto text-xs text-muted-foreground">8m</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">High cholesterol detected in latest panel</p>
-                </DropdownMenuItem>
-                <DropdownMenuItem className="flex flex-col items-start gap-1 py-3">
-                  <div className="flex w-full items-center gap-2">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">New record</span>
-                    <span className="ml-auto text-xs text-muted-foreground">1h</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Dr. Chen uploaded CBC results</p>
+                  <span className="text-sm font-medium">AI Alert</span>
+                  <p className="text-xs text-muted-foreground">
+                    High cholesterol detected in latest panel
+                  </p>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -311,11 +331,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               variant="ghost"
               size="icon"
               onClick={handleThemeToggle}
-              className="rounded-full group hover:bg-primary/10 transition-transform duration-300 hover:scale-110 active:scale-95"
+              className="rounded-full"
             >
-              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all duration-500 dark:-rotate-90 dark:scale-0 group-hover:text-warning" />
-              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all duration-500 dark:rotate-0 dark:scale-100 group-hover:text-primary-glow" />
-              <span className="sr-only">Toggle theme</span>
+              <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
             <DropdownMenu>
@@ -323,38 +342,42 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <button className="flex items-center gap-3 rounded-full p-1 pr-3 transition hover:bg-muted">
                   <Avatar className="h-9 w-9">
                     <AvatarFallback className="bg-gradient-primary text-primary-foreground text-xs font-semibold">
-                      {role === "doctor" ? "DR" : role === "admin" ? "AD" : "JD"}
+                      {initials || "U"}
                     </AvatarFallback>
                   </Avatar>
+
                   <div className="hidden text-left sm:block">
                     <p className="text-sm font-medium leading-tight">
-                      {role === "doctor" ? "Dr. Sarah Chen" : role === "admin" ? "Admin User" : "John Doe"}
+                      {displayName}
                     </p>
                     <p className="text-xs text-muted-foreground capitalize flex items-center gap-1">
-                      {role === "doctor" ? <Stethoscope className="h-3 w-3" /> : <Activity className="h-3 w-3" />}
+                      {role === "doctor" ? (
+                        <Stethoscope className="h-3 w-3" />
+                      ) : (
+                        <Activity className="h-3 w-3" />
+                      )}
                       {role}
                     </p>
                   </div>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent
-                side="bottom"
-                align="end"
-                sideOffset={8}
-                collisionPadding={16}
-                className="w-56"
-              >
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>{displayName}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="group">
-                  <User className="mr-2 h-4 w-4 transition-transform group-hover:scale-110" />
+
+                <DropdownMenuItem onClick={() => navigate({ to: "/profile" })}>
+                  <User className="mr-2 h-4 w-4" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem className="group">
-                  <Settings className="mr-2 h-4 w-4 transition-transform duration-500 group-hover:rotate-180" />
+
+                <DropdownMenuItem>
+                  <Settings className="mr-2 h-4 w-4" />
                   Settings
                 </DropdownMenuItem>
+
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -378,17 +401,23 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
         </main>
       </div>
+
       <AiAssistant />
     </div>
   );
 }
 
-export function StatusBadge({ status }: { status: "Stable" | "Monitoring" | "Critical" }) {
+export function StatusBadge({
+  status,
+}: {
+  status: "Stable" | "Monitoring" | "Critical";
+}) {
   const map = {
     Stable: "bg-success/15 text-success border-success/30",
     Monitoring: "bg-warning/15 text-warning-foreground border-warning/40",
     Critical: "bg-destructive/15 text-destructive border-destructive/30",
   } as const;
+
   return (
     <Badge variant="outline" className={cn("font-medium", map[status])}>
       {status}
