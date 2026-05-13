@@ -12,6 +12,11 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(String, nullable=False)  # patient / doctor / admin
     created_at = Column(DateTime, server_default=func.now())
+    phone = Column(String, nullable=True)
+    dob = Column(String, nullable=True)
+    gender = Column(String, nullable=True)
+    blood_group = Column(String, nullable=True)
+    address = Column(String, nullable=True)
 
 
 class MedicalRecord(Base):

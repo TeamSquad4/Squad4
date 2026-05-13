@@ -14,6 +14,11 @@ export interface UserResponse {
   name: string;
   email: string;
   role: string;
+  phone?: string | null;
+  dob?: string | null;
+  gender?: string | null;
+  blood_group?: string | null;
+  address?: string | null;
 }
 
 export interface RecordResponse {
@@ -59,9 +64,7 @@ async function request<T>(
 
   if (auth) {
     const token = getToken();
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -69,38 +72,40 @@ async function request<T>(
     headers,
   });
 
-  if (res.status === 401) {
-    clearAuth();
-  }
+  if (res.status === 401) clearAuth();
 
   if (!res.ok) {
     let detail = `HTTP ${res.status}`;
-
     try {
       const json = await res.json();
       detail = json.detail || detail;
-    } catch {
-      // ignore JSON parse error
-    }
-
+    } catch {}
     throw new Error(detail);
   }
 
-  if (res.status === 204) {
-    return undefined as T;
-  }
+  if (res.status === 204) return undefined as T;
 
   return res.json() as Promise<T>;
 }
 
 export const api = {
   auth: {
-    register(name: string, email: string, password: string, role: string) {
+    register(data: {
+      name: string;
+      email: string;
+      password: string;
+      role: string;
+      phone?: string;
+      dob?: string;
+      gender?: string;
+      blood_group?: string;
+      address?: string;
+    }) {
       return request<UserResponse>(
         "/users/register",
         {
           method: "POST",
-          body: JSON.stringify({ name, email, password, role }),
+          body: JSON.stringify(data),
         },
         false
       );
@@ -130,13 +135,10 @@ export const api = {
     },
 
     upload(formData: FormData) {
-      return request<RecordResponse>(
-        "/records/upload",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      return request<RecordResponse>("/records/upload", {
+        method: "POST",
+        body: formData,
+      });
     },
   },
 
@@ -152,27 +154,21 @@ export const api = {
     requestAccess(patientId: number) {
       return request<AccessRequestResponse>(
         `/access/request-access?patient_id=${patientId}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
     },
 
     approve(requestId: number) {
       return request<AccessRequestResponse>(
         `/access/approve/${requestId}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
     },
 
     reject(requestId: number) {
       return request<AccessRequestResponse>(
         `/access/reject/${requestId}`,
-        {
-          method: "POST",
-        }
+        { method: "POST" }
       );
     },
   },

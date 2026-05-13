@@ -1,18 +1,20 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Literal
 
-
-# ── Auth ──────────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
     name: str
-    email: str
+    email: EmailStr
     password: str
-    role: str  # patient / doctor / admin
-
+    role: Literal["patient", "doctor", "admin"]
+    phone: str | None = None
+    dob: str | None = None
+    gender: str | None = None
+    blood_group: str | None = None
+    address: str | None = None
 
 class LoginSchema(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -22,19 +24,23 @@ class TokenResponse(BaseModel):
     user_id: int
 
 
-# ── Users / Profile ───────────────────────────────────────────────────────────
-
 class UserResponse(BaseModel):
     id: int
     name: str
     email: str
     role: str
+    phone: str | None = None
+    dob: str | None = None
+    gender: str | None = None
+    blood_group: str | None = None
+    address: str | None = None
 
     class Config:
         from_attributes = True
 
+    class Config:
+        from_attributes = True
 
-# ── Records ───────────────────────────────────────────────────────────────────
 
 class RecordResponse(BaseModel):
     id: int
@@ -48,13 +54,11 @@ class RecordResponse(BaseModel):
     description: str
     notes: str
     blockchain_hash: str | None = None
-    blockchain_tx : str | None = None
+    blockchain_tx: str | None = None
 
     class Config:
         from_attributes = True
 
-
-# ── Access ────────────────────────────────────────────────────────────────────
 
 class AccessRequestResponse(BaseModel):
     id: int
